@@ -5,4 +5,4 @@
 ![image](https://user-images.githubusercontent.com/53905201/71388555-2e020900-263c-11ea-865a-a644fb5e29dc.png)
 
 - 전자정부프레임워크
-- DHTMLX 
+- DHTMLX 사용
