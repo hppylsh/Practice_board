@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="common">
+	<!-- 메뉴 검색조건 -->
+	<select id="selectMS" resultType="egovMap">
+	/* common.selectMS */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='4'
+		ORDER BY OPTION_ID
+	</select>
+	
+	<!-- 그룹 검색조건 -->
+	<select id="selectGS" resultType="egovMap">
+	/* common.selectGS */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='5'
+		ORDER BY OPTION_ID
+	</select>
+	
+	<!-- 프로그램 검색조건 -->
+	<select id="selectPS" resultType="egovMap">
+	/* common.selectPS */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='6'
+		ORDER BY OPTION_ID
+	</select>
+	
+	<!-- 게시판(BBS) 검색조건 -->
+	<select id="selectBS" resultType="egovMap">
+	/* common.selectBS */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='7'
+		ORDER BY OPTION_ID
+	</select>
+	
+
+</mapper>

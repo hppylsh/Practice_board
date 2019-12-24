@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="gm">
+
+	<select id="selectGM" parameterType="java.util.Map" resultType="egovMap">
+	/* gm.selectGM */
+		SELECT
+			 GM_ID 
+			 , MN.MENU_INDEX
+			 , MN.MENU_ID
+			 , MN.MENU_NAME
+			 , GROUP_ID
+		FROM
+			 TB_GROUP_MENU_LSH GM
+		JOIN
+			 TB_MENU_LSH MN
+		ON
+			 GM.MENU_INDEX=MN.MENU_INDEX
+		WHERE GROUP_ID=#{groupId} AND MENU_DEL_DATE IS NULL AND GM_DEL_DATE IS NULL
+		ORDER BY MENU_ID
+	</select>
+	
+	<insert id="insertGM" parameterType="egovMap">
+		<selectKey keyProperty="GM_ID" order="BEFORE" resultType="INT">
+	    	select GROUP_MENU_LSH_SEQ.NEXTVAL from dual
+		</selectKey>
+		INSERT INTO 
+			TB_GROUP_MENU_LSH 
+			(
+				GM_ID
+				, MENU_INDEX
+				, GROUP_ID
+			)
+		VALUES
+			(
+				#{GM_ID}
+				, #{menuIndex}
+				, #{groupId}
+			)
+	</insert>
+	
+	<update id="updateGM" parameterType="egovMap">
+	/* auth.updateAuth */
+		UPDATE TB_GROUP_MENU_LSH
+		SET
+			MENU_INDEX=#{menuIndex}
+			, GROUP_ID=#{groupId}
+		WHERE
+			GM_ID=#{gmId}
+	</update>
+	
+	<update id="deleteGM" parameterType="egovMap">
+	/* auth.updateAuth */
+		UPDATE TB_GROUP_MENU_LSH
+		SET
+			GM_DEL_DATE=SYSDATE
+		WHERE
+			GM_ID=#{gmId}
+	</update>
+	
+</mapper>

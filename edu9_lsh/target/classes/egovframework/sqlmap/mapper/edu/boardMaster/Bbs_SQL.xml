@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="bbs">
+
+	<sql id="selectBS">
+		<if test="selectBS == 'BS001'">
+			AND (B.BBS_ID LIKE '%'||#{keyword}||'%'
+			OR BBS_NAME LIKE '%'||#{keyword}||'%')
+		</if>
+		<if test="selectBS == 'BS002'">
+			AND B.BBS_ID LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="selectBS == 'BS003'">
+			AND BBS_NAME LIKE '%'||#{keyword}||'%'
+		</if>
+	</sql>
+		
+	<!-- 게시판 상태 데이터 필요할 때 -->
+	<select id="bbsCondition" parameterType="java.util.Map" resultType="egovMap">
+	/* bbs.bbsCondition */
+	SELECT
+		 BBS_ID
+		 , BBS_NAME
+		 , BBS_READ
+		 , BBS_WRITE
+		 , BBS_DEL
+		 , BBS_USE
+		 , BBS_NOTICE
+		 , BBS_SEARCH
+		 , BBS_PAGE
+	FROM
+		 TB_BOARD_MGR_LSH
+	WHERE
+		 BBS_ID=${bbsId} AND ROWNUM=1
+	</select>
+	
+	
+	<!-- 게시판 리스트 -->
+	<select id="bbsList" resultType="egovMap">
+	/* bbs.bbslist */
+		SELECT
+			B.BBS_ID
+			, BBS_NAME
+			, BBS_REG_DATE
+			, BBS_REV_DATE
+			, BBS_READ
+			, BBS_WRITE
+			, BBS_DEL
+			, BBS_USE
+			, BBS_NOTICE
+			, BBS_SEARCH
+			, BBS_PAGE
+		FROM
+			TB_BOARD_MGR_LSH B
+		 WHERE BBS_DEL_DATE IS NULL
+		<include refid="selectBS" />
+		ORDER BY B.BBS_ID
+	</select>
+
+	<!-- 게시판 상세페이지 -->
+	<select id="bbsDetail" parameterType="java.util.Map" resultType="egovMap">
+	/* bbs.bbsDetail */
+		SELECT BBS_ID
+			, BBS_NAME
+			, BBS_REG_DATE
+			, BBS_RIV_DATE
+			, BBS_READ
+			, BBS_WRITE
+			, BBS_DEL
+			, BBS_USE
+			, BBS_NOTICE
+			, BBS_SEARCH
+			, BBS_PAGE
+		FROM
+		TB_BOARD_MGR_LSH
+		WHERE BBS_ID=#{bbsId}
+		ORDER BY BBS_ID
+	</select>
+
+	<!-- 게시판 수정 -->
+	<update id="updateBbsDetail" parameterType="egovMap">
+	/* bbs.updateBbsDetail */
+	declare
+		P_BBS_ID	NUMBER(3);
+		<![CDATA[ P_PRO_ID TB_PROGRAM_LSH.PRO_ID%TYPE; ]]>
+	begin	
+		UPDATE
+			TB_BOARD_MGR_LSH
+		SET
+			BBS_NAME=#{bbsName}
+			, BBS_READ= #{bbsRead}
+			, BBS_WRITE= #{bbsWrite}
+			, BBS_DEL= #{bbsDel}
+			, BBS_USE= #{bbsUse}
+			, BBS_NOTICE= #{bbsNotice}
+			, BBS_SEARCH=#{bbsSearch}
+			, BBS_PAGE=#{bbsPage}
+		WHERE
+			 BBS_ID=#{bbsId};
+		
+		UPDATE 
+			TB_PROGRAM_LSH
+		SET
+			PRO_NAME=#{bbsName}
+		WHERE
+			BBS_ID=#{bbsId};
+	end;	 
+	</update>
+
+	<!-- 게시판 생성 -->
+	<insert id="insertBbs" parameterType="java.util.Map">
+	/* bbs.insertBbs */
+		declare
+			<![CDATA[ P_BBS_ID TB_BOARD_MGR_LSH.BBS_ID%TYPE; ]]>
+			<![CDATA[ P_PRO_ID TB_PROGRAM_LSH.PRO_ID%TYPE; ]]>
+		begin	
+			INSERT INTO
+			TB_BOARD_MGR_LSH(
+			     BBS_ID
+				, BBS_NAME
+				, BBS_REG_DATE
+				, BBS_READ
+				, BBS_WRITE
+				, BBS_DEL
+				, BBS_USE
+				, BBS_NOTICE
+				, BBS_SEARCH
+				, BBS_PAGE
+			)
+			VALUES
+			( BBS_MGR_SEQ_LSH.nextval
+			, #{bbsName}
+			, SYSDATE
+			, #{bbsRead}
+			, #{bbsWrite}
+			, #{bbsDel}
+			, #{bbsUse}
+			, #{bbsNotice}
+			, #{bbsSearch}
+			, #{bbsPage} );
+			
+			
+			 SELECT BBS_MGR_SEQ_LSH.currval INTO P_BBS_ID
+ 			 FROM DUAL;
+			
+			/* 게시판 insert 해준 후 program도 함께 insert */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(PRO_ID,5))), 0 ) + 1 INTO P_PRO_ID
+			FROM TB_PROGRAM_LSH;
+		    
+		    P_PRO_ID := 'PRO_'||LPAD(TO_CHAR(P_PRO_ID), 3, '0');
+		    
+		    INSERT INTO TB_PROGRAM_LSH(PRO_ID, PRO_NAME, PRO_COMMENT, PRO_URL, BBS_ID, PRO_REG_DATE, PRO_REG_ID)
+		    VALUES (P_PRO_ID, #{bbsName}, '게시판', 'comcon.do?listName=boardList', P_BBS_ID , SYSDATE, 1);
+		END;
+	</insert>
+	
+	<!-- 게시판 삭제시 -->
+	<update id="updateDeleteBbs"  parameterType="egovMap">
+	/* bbs.updateDeleteBbs */
+		declare
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_BBS_ID TB_BOARD_MGR_LSH.BBS_ID%TYPE; ]]>
+			<![CDATA[ P_PRO_ID TB_PROGRAM_LSH.PRO_ID%TYPE; ]]>
+		begin
+			/* 메뉴 ID 담기 */
+			SELECT MENU_ID INTO P_MENU_ID
+			FROM TB_BOARD_MGR_LSH BM LEFT JOIN TB_PROGRAM_LSH P ON BM.BBS_ID=P.BBS_ID
+			LEFT JOIN TB_MENU_LSH M ON P.PRO_ID=M.PRO_ID
+			WHERE BM.BBS_ID=#{bbsId};
+						
+			/* 메뉴 부모 ID 담기 */
+			SELECT MENU_PARENT INTO P_PARENT_ID
+			FROM TB_BOARD_MGR_LSH BM LEFT JOIN TB_PROGRAM_LSH P ON BM.BBS_ID=P.BBS_ID
+			LEFT JOIN TB_MENU_LSH M ON P.PRO_ID=M.PRO_ID
+			WHERE BM.BBS_ID=#{bbsId};
+			
+			/* 메뉴가 존재할 때 */
+			IF(P_MENU_ID IS NOT NULL)
+				THEN
+			
+				/* 삭제하는 메뉴가 대분류일 때(부모 ID가 최상위일 때) */
+				IF(P_PARENT_ID = 'MENU_000000')
+					THEN
+					
+					UPDATE TB_MENU_LSH
+					SET MENU_DEL_DATE=SYSDATE
+					WHERE MENU_ID=P_MENU_ID;
+											
+					UPDATE TB_MENU_LSH 
+					SET MENU_PARENT='MENU_000000'
+					WHERE MENU_PARENT=P_MENU_ID;
+				      		 					
+					
+				/* 삭제하는 메뉴가 중분류일 때 */
+				ELSIF(P_PARENT_ID LIKE '%0000')
+					THEN
+					
+					UPDATE TB_MENU_LSH
+					SET MENU_DEL_DATE=SYSDATE
+					WHERE MENU_ID=P_MENU_ID;
+	                
+	               	UPDATE TB_MENU_LSH 
+					SET MENU_PARENT='MENU_000000'
+					WHERE MENU_PARENT=P_MENU_ID;
+					
+				/* 삭제하는 메뉴가 소분류일 때 */
+				ELSE
+					UPDATE TB_MENU_LSH
+					SET MENU_DEL_DATE=SYSDATE
+					WHERE MENU_ID=P_MENU_ID;
+				END IF;
+			END IF;
+			
+			/* 프로그램 삭제 */
+			SELECT P.PRO_ID INTO P_PRO_ID
+			FROM TB_BOARD_MGR_LSH BM LEFT JOIN TB_PROGRAM_LSH P ON BM.BBS_ID=P.BBS_ID
+			LEFT JOIN TB_MENU_LSH M ON P.PRO_ID=M.PRO_ID
+			WHERE BM.BBS_ID=#{bbsId};
+			
+			UPDATE
+				 TB_PROGRAM_LSH
+			SET 
+				PRO_DEL_DATE=SYSDATE
+			WHERE
+				 PRO_ID=P_PRO_ID;
+			
+			/* 게시판 삭제 */
+			UPDATE TB_BOARD_MGR_LSH
+			SET BBS_DEL_DATE=SYSDATE
+			WHERE BBS_ID=#{bbsId};
+		END;
+	</update>
+
+</mapper>

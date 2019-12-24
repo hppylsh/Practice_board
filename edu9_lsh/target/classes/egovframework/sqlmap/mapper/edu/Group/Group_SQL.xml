@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="group">
+	
+	<sql id="selectGS">
+		<if test="selectGS == 'GS001'">
+			AND (GROUP_ID LIKE '%'||#{keyword}||'%'
+			OR GROUP_NAME LIKE '%'||#{keyword}||'%')
+		</if>
+		<if test="selectGS == 'GS002'">
+			AND GROUP_ID LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="selectGS == 'GS003'">
+			AND GROUP_NAME LIKE '%'||#{keyword}||'%'
+		</if>
+	</sql>
+	
+	
+	<!-- 그룹 리스트 -->
+	<select id="selectGroupList" resultType="egovMap">
+	/* group.selectGroupList */
+		SELECT
+			 GROUP_ID
+			 , GROUP_NAME
+			 , GROUP_REG_DATE
+			 , GROUP_REV_DATE
+			 , GROUP_REG_MEM
+			 , GROUP_REV_MEM 
+		FROM
+			 TB_GROUP_LSH
+		WHERE GROUP_DEL_DATE IS NULL
+		<include refid="selectGS" />
+		ORDER BY GROUP_ID
+	</select>
+	
+	<!-- 그룹 추가 -->
+	<insert id="insertGroup" parameterType="java.util.Map">
+	/* group.insertGroup */
+	<selectKey keyProperty="GROUP_ID" order="BEFORE" resultType="INT">
+    	select GROUP_LSH_SEQ.NEXTVAL from dual
+	</selectKey>
+		INSERT INTO 
+				TB_GROUP_LSH
+				(
+				GROUP_ID
+				,GROUP_NAME
+				,GROUP_REG_DATE
+				,GROUP_REG_MEM
+				)
+		VALUES 
+				(
+				#{GROUP_ID}
+				, #{groupName}
+				, SYSDATE
+				, #{memberId})
+	</insert>
+	
+	<!-- 그룹 삭제 -->
+	<update id="updateDeleteGroup" parameterType="java.util.Map">
+	/* group.updateDeleteGroup */
+	DECLARE
+		P_MEMBER_COUNT NUMBER(3);
+		<![CDATA[ P_MEMBER_ID TB_MEMBER_LSH.MEMBER_ID%TYPE; ]]>
+	BEGIN
+		SELECT COUNT(*) AS MEMBER_COUNT INTO P_MEMBER_COUNT
+		FROM TB_MEMBER_LSH
+		WHERE GROUP_ID=#{groupId};
+		
+		IF (P_MEMBER_COUNT>0)
+			THEN
+			UPDATE TB_MEMBER_LSH
+			SET GROUP_ID=1
+			WHERE GROUP_ID=#{groupId};
+		END IF;
+		
+		UPDATE 
+			TB_GROUP_LSH
+		SET 
+			GROUP_DEL_DATE=SYSDATE
+			, GROUP_DEL_MEM=1
+		WHERE GROUP_ID=#{groupId};
+	END;
+	</update>
+	
+	<!-- 그룹 수정 -->
+	<update id="updateGroup" parameterType="java.util.Map">
+	/* group.updateGroup */
+		UPDATE
+			 TB_GROUP_LSH
+		SET
+			 GROUP_NAME=#{groupName}
+			 , GROUP_REV_DATE=SYSDATE
+			 , GROUP_REV_MEM=1
+		WHERE
+			 GROUP_ID=${groupId}
+	</update>
+	
+	<!-- 그룹 별 사용자 (memberByGroup)-->
+	<select id="selectMemberList" resultType="egovMap">
+	/* group.selectMemberList */
+		SELECT 
+			M.MEMBER_ID
+			, M.NAME
+			, M.LOGIN_ID
+			, M.PW
+			, M.NICKNAME
+			, M.EMAIL
+			, M.SIGN_DATE
+			, M.GROUP_ID
+			, G.GROUP_NAME
+		FROM
+			 TB_MEMBER_LSH M 
+		JOIN
+			 TB_GROUP_LSH G 
+		ON 
+			M.GROUP_ID=G.GROUP_ID
+		WHERE
+			 M.DEL_DATE IS NULL
+			 AND G.GROUP_ID=#{groupId}
+		ORDER BY M.MEMBER_ID
+	</select>
+	
+	<!-- 사용자 수정(그룹) -->
+	<update id="updateMember" parameterType="java.util.Map">
+	/* group.updateMember */
+		UPDATE
+			 TB_MEMBER_LSH
+		SET
+			 NAME=#{name}
+			 ,NICKNAME=#{nickname}
+			 , PW=#{pw}
+			 , EMAIL=#{email}
+			 , GROUP_ID=#{groupId}
+		WHERE
+			 MEMBER_ID=#{memberId}
+	</update>
+	
+	<!-- 사용자 삭제 -->
+	<update id="updateDelMember" parameterType="java.util.Map">
+	/* group.updateDelMember */
+		UPDATE
+			 TB_MEMBER_LSH
+		SET
+			 DEL_DATE=SYSDATE
+		WHERE
+			 MEMBER_ID=#{memberId}
+	</update>
+	
+	<!-- 사용자 등록 -->
+	<insert id="insertMember" parameterType="egovMap">
+	/* group.insertMember */
+		DECLARE
+			<![CDATA[ P_MEMBER_ID TB_MEMBER_LSH.MEMBER_ID%TYPE; ]]>
+		BEGIN
+			SELECT MEMBER_LSH_SEQ.NEXTVAL INTO P_MEMBER_ID
+			FROM DUAL;
+			
+			INSERT INTO
+			TB_MEMBER_LSH(
+			MEMBER_ID
+			,NAME
+			,LOGIN_ID
+			,PW
+			,NICKNAME
+			,EMAIL
+			,SIGN_DATE
+			,GROUP_ID
+			)
+			VALUES 
+			(
+			P_MEMBER_ID
+			,#{name}
+			,#{loginId}
+			,#{pw}
+			,#{nickname}
+			,#{email}
+			,SYSDATE
+			,#{groupId}
+			);
+		END;
+	</insert>
+	
+	
+</mapper>

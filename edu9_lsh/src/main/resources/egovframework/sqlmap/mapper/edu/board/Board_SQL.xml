@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="board">
+
+	<sql id="search">
+		<if test="search_option == 'SO001'">
+			AND (TITLE LIKE '%'||#{keyword}||'%'
+			OR NICKNAME LIKE
+			'%'||#{keyword}||'%'
+			OR CONTENT LIKE '%'||#{keyword}||'%' )
+		</if>
+		<if test="search_option == 'SO004' ">
+			AND TITLE LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="search_option == 'SO002' ">
+			AND NICKNAME LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="search_option == 'SO003' ">
+			AND CONTENT LIKE '%'||#{keyword}||'%'
+		</if>
+	</sql>
+
+	<sql id="search_notice">
+		<if test="search_notice == 'SN001'">
+		</if>
+		<if test="search_notice == 'SN002' ">
+			AND NOTICE=0
+		</if>
+		<if test="search_notice == 'SN003' ">
+			AND NOTICE=1
+		</if>
+	</sql>
+	
+	<!-- 게시글list -->
+	<select id="list" parameterType="java.util.Map" resultType="egovMap">
+	/* board.list */
+		<choose>
+          	<when test='bbsPage == "BO001" '>
+			 SELECT *
+				FROM (
+            </when>
+		</choose>
+	            SELECT ROWNUM AS RN, A.*
+				FROM(
+					SELECT
+						ROWNUM
+						, B.BOARD_ID
+						, B.TITLE
+						, B.CONTENT
+						, B.WRITEDATE
+						, B.MEMBER_ID
+						, B.HITCOUNT
+						, B.NOTICE
+						, POST_END
+						, SECRET_CHECK
+						, M.NICKNAME
+						, B.BBS_ID
+						, (SYSDATE-WRITEDATE) AS POPNEW
+				FROM
+					TB_BOARD_LSH B
+				JOIN
+					 TB_MEMBER_LSH M
+				ON
+					 B.MEMBER_ID=M.MEMBER_ID
+				JOIN 
+					TB_BOARD_MGR_LSH BM 
+				ON
+				 	B.BBS_ID=BM.BBS_ID
+				WHERE
+					B.BBS_ID=#{bbsId}
+				AND (POST_END IS NULL OR POST_END>SYSDATE)
+				AND B.DEL_DATE IS NULL 
+				<include refid="search" />
+				<include refid="search_notice" />
+	  			ORDER BY NOTICE DESC , BOARD_ID DESC 
+				) A
+		<choose>
+          	<when test='bbsPage == "BO001" '>
+			) WHERE RN BETWEEN #{start} AND #{end}
+            </when>
+		</choose>
+	</select>
+
+	<!-- 게시글 상세 -->
+	<select id="detail" parameterType="java.util.Map" resultType="egovMap">
+	/* board.detail */
+		SELECT BOARD_ID
+			, TITLE
+			, CONTENT
+			, WRITEDATE
+			, HITCOUNT
+			, MEMBER_ID
+			, (SELECT NICKNAME
+				FROM TB_MEMBER_LSH M
+				WHERE M.MEMBER_ID=B.MEMBER_ID) AS NICKNAME
+			, BBS_ID
+            , (SELECT BBS_NAME FROM TB_BOARD_MGR_LSH BM WHERE BM.BBS_ID = B.BBS_ID) AS BBS_NAME
+			, SECRET_CHECK
+			, NOTICE
+			, POST_END
+			, SECRET_CHECK
+		FROM TB_BOARD_LSH B
+		WHERE BOARD_ID = #{boardId}
+	</select>
+
+	<!-- 게시글 입력 -->
+	<insert id="writeInsert" parameterType="egovMap">
+	/*board.writeInsert*/
+		declare
+			P_BOARD_ID	NUMBER(3);
+		begin
+			SELECT MAX(BOARD_ID)+1 INTO P_BOARD_ID
+			FROM TB_BOARD_LSH;
+			
+			INSERT INTO TB_BOARD_LSH(
+			BOARD_ID
+			, TITLE
+			, CONTENT
+			, WRITEDATE
+			, MEMBER_ID
+			, HITCOUNT
+			, BBS_ID
+			, NOTICE
+			, POST_END
+			, SECRET_CHECK)
+			VALUES
+			(
+			P_BOARD_ID
+			, #{title}
+			, #{content}
+			, SYSDATE
+			, #{memberId}
+			, 0
+			, #{bbsId}
+			, #{notice}
+			, #{postEnd}
+			, #{secretCheck});
+		END;
+	</insert>
+
+	<!-- 게시글 삭제 -->
+	<update id="updateDeleteBoard" parameterType="egovMap">
+	/*board.updateDeleteBoard*/
+		UPDATE
+			TB_BOARD_LSH
+		SET
+			DEL_DATE=SYSDATE
+		WHERE
+			BOARD_ID=#{boardId}
+	</update>
+
+	<!-- 이전글 다음글 -->
+	<select id="selectLeadLag" parameterType="java.util.Map" resultType="egovMap">
+	/*board.selectLeadLag*/
+		SELECT *
+	    FROM(
+		        SELECT 
+		        BOARD_ID AS BOARD_ID
+		        , TITLE AS TITLE
+		        , LAG(BOARD_ID) OVER (ORDER BY BOARD_ID) AS BEFORE_ID
+		        , LAG(TITLE) OVER (ORDER BY BOARD_ID) AS BEFORE_NAME
+		        , LEAD(BOARD_ID) OVER (ORDER BY BOARD_ID) AS AFTER_ID
+		        , LEAD(TITLE) OVER (ORDER BY BOARD_ID) AS AFTER_NAME
+		        FROM
+		            TB_BOARD_LSH B
+		        JOIN
+		             TB_MEMBER_LSH M
+		        ON
+		             B.MEMBER_ID=M.MEMBER_ID
+		        JOIN 
+		            TB_BOARD_MGR_LSH BM 
+		        ON
+		            B.BBS_ID=BM.BBS_ID
+		        WHERE B.BBS_ID=#{bbsId}
+		        AND 
+		            B.DEL_DATE IS NULL
+		        AND 
+		            (POST_END IS NULL OR POST_END>SYSDATE)
+				<include refid="search" />
+				<include refid="search_notice" />
+		        ORDER BY BOARD_ID DESC
+	    	) SUB
+		WHERE SUB.BOARD_ID = #{boardId}
+	</select>
+
+	<!-- 게시판 페이징하기 위해서 게시글 갯수 count -->
+	<select id="selectCountList" parameterType="java.util.Map" resultType="int">
+	/* board.selectCountList */
+		SELECT
+			 COUNT(*) AS COUNT
+		FROM
+			 TB_BOARD_LSH B
+		LEFT JOIN
+			 TB_MEMBER_LSH M
+		ON
+			 B.MEMBER_ID=M.MEMBER_ID
+		WHERE
+			 B.BBS_ID=#{bbsId} AND (B.DEL_DATE IS NULL) AND (POST_END IS NULL OR POST_END>SYSDATE)
+		<include refid="search" />
+		<include refid="search_notice" />
+	</select>
+	
+	<!-- 게시글 조회수 +1  -->
+	<update id="updateHitCnt" parameterType="java.util.Map">
+	/* board.updateHitCnt */
+		UPDATE 
+			TB_BOARD_LSH
+		SET
+			HITCOUNT = NVL(HITCOUNT, 0) + 1
+		WHERE
+			BOARD_ID = ${boardId}
+	</update>
+	
+	<!-- 게시글수정 -->
+	<update id="updateBoard" parameterType="egovMap">
+	/* board.updateBoard */
+		UPDATE TB_BOARD_LSH
+		SET
+			TITLE = #{title}
+			, CONTENT=#{content}
+			, RIV_DATE=SYSDATE
+			, RIV_ID=1
+			, NOTICE=#{notice}
+			, POST_END=#{postEnd}
+			, SECRET_CHECK=#{secretCheck}
+		WHERE BOARD_ID=#{boardId}
+	</update>
+	
+	<!-- 게시글 option_id = 1 -->
+	<select id="selectSN" resultType="egovMap">
+	/* board.selectSN */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='1'
+	</select>
+	
+	<!-- 게시글 option_id = 2 -->
+	<select id="selectSO" resultType="egovMap">
+	/* board.selectSO */
+		SELECT
+				OPTION_ID
+				, OPTION_NAME
+				, OPTIONMASTER_ID
+		FROM 
+				TB_OPTION_LSH
+		WHERE 
+				OPTIONMASTER_ID='2'
+	</select>
+	
+	<!-- 게시판 사용/비사용 불러올 때 사용 -->
+	<select id="useUnuse" resultType="egovMap">
+	/* board.useUnuse */
+	    SELECT * 
+	    FROM TB_OPTION_LSH
+	    WHERE OPTIONMASTER_ID=3
+	</select>
+	
+</mapper>

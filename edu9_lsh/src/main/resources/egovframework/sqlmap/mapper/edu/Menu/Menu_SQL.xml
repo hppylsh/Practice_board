@@ -1,0 +1,515 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="menu">
+	
+	<sql id="selectMS">
+		<if test="selectMS == '	MS001'">
+			AND (MENU_ID LIKE '%'||#{keyword}||'%'
+			OR MENU_NAME LIKE '%'||#{keyword}||'%'
+			OR PRO_NAME LIKE '%'||#{keyword}||'%'
+			OR M.MENU_PARENT IN (SELECT MENU_ID FROM TB_MENU_LSH WHERE MENU_NAME LIKE '%'||#{keyword}||'%')
+		</if>
+		<if test="selectMS == 'MS002'">
+			AND MENU_ID LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="selectMS == 'MS003'">
+			AND MENU_NAME LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="selectMS == 'MS004'">
+			AND PRO_NAME LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="selectMS == 'MS005'">
+			AND M.MENU_PARENT IN (SELECT MENU_ID FROM TB_MENU_LSH WHERE MENU_NAME LIKE '%'||#{keyword}||'%')
+		</if>
+	</sql>
+	
+	<!-- 메뉴list -->
+	<select id="selectMenu" resultType="egovMap">
+	/* menu.selectMenu */
+		SELECT
+			 MENU_ID
+			 , MENU_NAME
+			 , P.PRO_ID
+			 , P.PRO_NAME
+			 , MENU_SORT
+			 , MENU_PARENT
+			 , P.BBS_ID
+			 , MENU_REG_DATE
+			 , MENU_REG_ID
+			 , MENU_REV_DATE
+			 , MENU_REV_ID
+			 , MENU_INDEX
+		FROM
+			 TB_MENU_LSH M 
+		LEFT JOIN
+			 TB_PROGRAM_LSH P 
+		ON
+			 M.PRO_ID=P.PRO_ID
+		LEFT JOIN
+			 TB_BOARD_MGR_LSH BM 
+		ON
+			 P.BBS_ID=BM.BBS_ID
+		WHERE
+			MENU_DEL_DATE IS NULL AND (P.BBS_ID IS NULL OR BBS_USE='BO001')
+		<include refid="selectMS" />
+		ORDER BY  MENU_ID ,MENU_SORT
+	</select>
+	
+	
+	<!-- 로그인용 메뉴 -->
+	<!-- 메뉴list -->
+	<select id="selectGroupId" parameterType="java.util.Map" resultType="egovMap">
+	/* menu.selectGroupId */
+			SELECT MENU_ID,MENU_NAME,MENU_PARENT
+			FROM(
+				SELECT 
+					MENU_ID
+					, MENU_NAME
+					, MENU_INDEX 
+					, MENU_PARENT
+					, MENU_SORT
+				FROM (
+					SELECT 
+						M.LOGIN_ID, M.PW, G.GROUP_ID 
+					FROM 
+						TB_MEMBER_LSH M 
+					JOIN TB_GROUP_LSH G 
+					ON 
+						M.GROUP_ID=G.GROUP_ID) T
+				RIGHT JOIN (
+					SELECT 
+						M.MENU_ID, M.MENU_NAME, M.MENU_INDEX , MENU_PARENT, MENU_SORT, GROUP_ID 
+					FROM 
+						TB_MENU_LSH M 
+					JOIN 
+						TB_GROUP_MENU_LSH GM 
+					ON GM.MENU_INDEX=M.MENU_INDEX) T2
+				ON T.GROUP_ID=T2.GROUP_ID
+				WHERE login_id=#{loginId} and pw=#{pw})
+			START WITH MENU_PARENT='MENU_000000'
+			CONNECT BY PRIOR MENU_ID=MENU_PARENT
+			ORDER SIBLINGS BY MENU_SORT, MENU_ID
+	</select>
+
+	<!-- 콤보박스용 -->
+	<select id="comboMenu" resultType="egovMap">
+	/* menu.comboMenu */
+	    SELECT  MENU_ID
+            , MENU_NAME
+			, MENU_INDEX
+    	FROM TB_MENU_LSH
+    	WHERE MENU_DEL_DATE IS NULL
+		ORDER BY MENU_ID
+	</select>
+		
+	<!-- header에서 tab을 만들기위해 사용하는 select -->
+	<select id="selectGoTab" parameterType="java.util.Map" resultType="egovMap">
+	/* menu.selectGoTab */
+	SELECT
+		MENU_ID
+		, MENU_NAME
+		, P.PRO_URL
+		, P.BBS_ID
+		, BBS_SEARCH
+		, BBS_PAGE		 
+	FROM
+		TB_MENU_LSH M 
+	LEFT JOIN
+		TB_PROGRAM_LSH P ON M.PRO_ID=P.PRO_ID
+	LEFT JOIN
+		TB_BOARD_MGR_LSH BM ON P.BBS_ID=BM.BBS_ID
+	WHERE
+		MENU_ID=#{menuId}
+     </select>
+     
+	<select id="selectGoMenu" parameterType="java.util.Map" resultType="egovMap">
+	/* menu.selectGoMenu */
+		SELECT	P.BBS_ID
+			 , BBS_SEARCH
+			 , BBS_PAGE
+		FROM
+			 TB_MENU_LSH M 
+		LEFT JOIN
+			 TB_PROGRAM_LSH P ON M.PRO_ID=P.PRO_ID
+		LEFT JOIN
+			 TB_BOARD_MGR_LSH BM ON P.BBS_ID=BM.BBS_ID
+		WHERE
+			 MENU_ID=#{menuId}
+	</select>
+	
+	<!-- 부모id 선택할 때 list -->
+	<select id="selectParent" resultType="egovMap">
+	/* menu.selectParent */
+		SELECT
+			 MENU_ID
+			 , MENU_NAME
+			 , PRO_COMMENT
+		FROM
+			 TB_MENU_LSH M LEFT JOIN TB_PROGRAM_LSH P ON M.PRO_ID=P.PRO_ID
+		WHERE MENU_ID LIKE '%00' AND MENU_DEL_DATE IS NULL
+		ORDER BY MENU_ID
+	</select>
+	
+	<update id="insertTopMenuParent" parameterType="egovMap">
+	/* menu.insertTopMenuParent */
+	/* 대분류(최상위 하위메뉴) insert할 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* MENU_INDEX(PK) +1 */
+			SELECT MAX(MENU_INDEX)+1 INTO P_MENU_INDEX
+			FROM TB_MENU_LSH;
+			 			
+    		/* MENU_ID중에서 대분류 MAX값 + 10 */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,2))), 0 ) + 10 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_DEL_DATE IS NULL;
+			
+			P_MENU_ID := 'MENU_'||RPAD(TO_CHAR(P_MENU_ID), 6, '0');
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			INSERT INTO TB_MENU_LSH(MENU_INDEX, MENU_ID, MENU_NAME, PRO_ID, MENU_PARENT, MENU_REG_DATE, MENU_REG_ID, MENU_SORT)
+	    	VALUES (P_MENU_INDEX, P_MENU_ID, #{menuName}, #{proId}, #{menuParent} ,SYSDATE, 1, P_MENU_SORT);
+	    	
+	    	/* 운영자 그룹(groupId=2) 권한 자동으로 넣어주기 */
+	    	INSERT INTO 
+			TB_GROUP_MENU_LSH 
+			(
+				GM_ID
+				, MENU_INDEX
+				, GROUP_ID
+			)
+			VALUES
+			(
+				GROUP_MENU_LSH_SEQ.NEXTVAL
+				, P_MENU_INDEX
+				, 2
+			);
+	    	
+	END;   
+	</update>
+	
+	<update id="insertMiddleMenuParent" parameterType="egovMap">
+	/* menu.insertMiddleMenuParent */
+	/* 중분류 INSERT 할 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* MENU_INDEX(PK) +1 */
+			SELECT MAX(MENU_INDEX)+1 INTO P_MENU_INDEX
+			FROM TB_MENU_LSH;
+			
+			/* MENU_ID중에서 중분류 MAX값 + 1 */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,4))), 0 ) + 1 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_DEL_DATE IS NULL;
+			
+			P_MENU_ID := 'MENU_'||RPAD(TO_CHAR(P_MENU_ID), 6, '0');
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			INSERT INTO TB_MENU_LSH(MENU_INDEX, MENU_ID, MENU_NAME, PRO_ID, MENU_PARENT, MENU_REG_DATE, MENU_REG_ID, MENU_SORT)
+   			VALUES (P_MENU_INDEX, P_MENU_ID, #{menuName}, #{proId}, #{menuParent} ,SYSDATE, 1, P_MENU_SORT);
+   			
+   			/* 운영자 그룹(groupId=2) 권한 자동으로 넣어주기 */
+	    	INSERT INTO 
+			TB_GROUP_MENU_LSH 
+			(
+				GM_ID
+				, MENU_INDEX
+				, GROUP_ID
+			)
+			VALUES
+			(
+				GROUP_MENU_LSH_SEQ.NEXTVAL
+				, P_MENU_INDEX
+				, 2
+			);
+   			
+	END;
+	</update>
+	
+	<update id="insertElseMenuParent" parameterType="egovMap">
+	/* menu.changeElseMenuParent */
+	/* 소분류 INSERT 할 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* MENU_INDEX(PK) +1 */
+			SELECT MAX(MENU_INDEX)+1 INTO P_MENU_INDEX
+			FROM TB_MENU_LSH;
+			
+			/* 검색을 위해 중분류 부모ID를 SUBSTR ex) MENU_2001 */
+			SELECT SUBSTR(#{menuParent},0,9) INTO P_PARENT_ID
+			FROM TB_MENU_LSH
+			WHERE ROWNUM=1 AND MENU_DEL_DATE IS NULL;
+			
+			/* SUBSTR%로 검색했을때 MAX 값 +1 ex) 'MENU_2001%' */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,6))), 0 ) + 1 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_ID LIKE P_PARENT_ID||'%' AND MENU_DEL_DATE IS NULL;
+			
+			P_MENU_ID := 'MENU_'||RPAD(TO_CHAR(P_MENU_ID), 6, '0');
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			INSERT INTO TB_MENU_LSH(MENU_INDEX, MENU_ID, MENU_NAME, PRO_ID, MENU_PARENT, MENU_REG_DATE, MENU_REG_ID, MENU_SORT)
+   			VALUES (P_MENU_INDEX, P_MENU_ID, #{menuName}, #{proId}, #{menuParent} ,SYSDATE, 1, P_MENU_SORT);
+   			
+   			/* 운영자 그룹(groupId=2) 권한 자동으로 넣어주기 */
+	    	INSERT INTO 
+			TB_GROUP_MENU_LSH 
+			(
+				GM_ID
+				, MENU_INDEX
+				, GROUP_ID
+			)
+			VALUES
+			(
+				GROUP_MENU_LSH_SEQ.NEXTVAL
+				, P_MENU_INDEX
+				, 2
+			);
+	END;
+	</update>
+	
+	
+	<update id="changeTopMenuParent" parameterType="egovMap">
+	/* menu.changeTopMenuParent */
+	/* 변경한 부모ID가 MENU_000000(최상위) 일 때*/
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* MENU_ID중에서 대분류 MAX값 + 10 */				
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,2))), 0 ) + 10 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_DEL_DATE IS NULL;
+			
+			/* MENU_ID에 붙임 */
+			P_MENU_ID := 'MENU_'||RPAD(TO_CHAR(P_MENU_ID), 6, '0');
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			UPDATE
+				 TB_MENU_LSH
+			SET
+				MENU_ID=P_MENU_ID
+				 , MENU_NAME=#{menuName}
+				 ,MENU_SORT=P_MENU_SORT
+				 ,MENU_PARENT=#{menuParent}
+				 ,PRO_ID=#{proId}
+				 ,MENU_REV_DATE=SYSDATE
+			WHERE
+				 MENU_INDEX=#{menuIndex};
+				 
+			/* 운영자 그룹(groupId=2) 권한 자동으로 넣어주기 */
+	    	INSERT INTO 
+			TB_GROUP_MENU_LSH 
+			(
+				GM_ID
+				, MENU_INDEX
+				, GROUP_ID
+			)
+			VALUES
+			(
+				GROUP_MENU_LSH_SEQ.NEXTVAL
+				, P_MENU_INDEX
+				, 2
+			);
+	END;   
+	</update>
+	
+	<update id="changeMiddleMenuParent" parameterType="egovMap">
+	/* menu.changeMiddleMenuParent */
+	/* 변경한 부모ID가 대분류일때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* 검색을 위해 대분류 부모ID를 SUBSTR ex) MENU_10 */
+			SELECT SUBSTR( #{menuParent} ,0,7) INTO P_PARENT_ID
+			FROM TB_MENU_LSH
+			WHERE ROWNUM=1;
+			
+			/* SUBSTR%로 검색했을때 MAX 값 +1 ex) 'MENU_10%00' -> 100400 */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,6))), 0 ) + 100 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_ID LIKE P_PARENT_ID||'%00' AND MENU_DEL_DATE IS NULL;
+			
+			P_MENU_ID := 'MENU_'||P_MENU_ID;
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			UPDATE
+				 TB_MENU_LSH
+			SET 
+				MENU_ID=P_MENU_ID
+				 , MENU_NAME=#{menuName}
+				 ,MENU_SORT=P_MENU_SORT
+				 ,MENU_PARENT=#{menuParent}
+				 ,PRO_ID=#{proId}
+				 ,MENU_REV_DATE=SYSDATE
+			WHERE
+				 MENU_INDEX=#{menuIndex};
+	END;
+	</update>
+	
+	<update id="changeElseMenuParent" parameterType="egovMap">
+	/* menu.changeElseMenuParent */
+	/* 변경한 부모ID가 중분류일때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			/* 검색을 위해 중분류 부모ID를 SUBSTR ex) MENU_2001 */
+			SELECT SUBSTR(#{menuParent},0,9) INTO P_PARENT_ID
+			FROM TB_MENU_LSH
+			WHERE ROWNUM=1;
+			
+			/* SUBSTR%로 검색했을때 MAX 값 +1 ex) 'MENU_2001%' */
+			SELECT NVL(MAX(TO_NUMBER(SUBSTR(MENU_ID,6,6))), 0 ) + 1 INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_ID LIKE P_PARENT_ID||'%' AND MENU_DEL_DATE IS NULL;
+			
+			P_MENU_ID := 'MENU_'||RPAD(TO_CHAR(P_MENU_ID), 6, '0');
+			
+			/* 메뉴순서 MAX값 + 1 */
+			SELECT NVL(MAX(MENU_SORT),0)  + 1 INTO P_MENU_SORT
+			FROM TB_MENU_LSH
+			WHERE MENU_PARENT=#{menuParent} AND MENU_DEL_DATE IS NULL;
+			
+			UPDATE
+				 TB_MENU_LSH
+			SET 
+				MENU_ID=P_MENU_ID
+				 , MENU_NAME=#{menuName}
+				 ,MENU_SORT=P_MENU_SORT
+				 ,MENU_PARENT=#{menuParent}
+				 ,PRO_ID=#{proId}
+				 ,MENU_REV_DATE=SYSDATE
+			WHERE
+				 MENU_INDEX=#{menuIndex};
+	END;
+	</update>
+	
+	<update id="noChangeMenuParent" parameterType="egovMap">
+	/* menu.noChangeMenuParent */
+	/* 부모를 변경하지 않았을 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_MENU_INDEX TB_MENU_LSH.MENU_INDEX%TYPE; ]]>
+			<![CDATA[ P_MENU_SORT TB_MENU_LSH.MENU_SORT%TYPE; ]]>
+	BEGIN
+			UPDATE
+				 TB_MENU_LSH
+			SET
+				MENU_ID=#{menuId}
+				 , MENU_NAME=#{menuName}
+				 ,MENU_SORT=#{menuSort}
+				 ,MENU_PARENT=#{menuParent}
+				 ,PRO_ID=#{proId}
+				 ,MENU_REV_DATE=SYSDATE
+			WHERE
+		 	MENU_INDEX=#{menuIndex};
+	END;
+	</update>
+	
+	<!-- 메뉴삭제 -->
+	<update id="deleteTopMenu" parameterType="egovMap">
+	/* menu.deleteMenu */
+	/* 삭제하는 메뉴가 대분류일 때(부모 ID가 최상위일 때) */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+	BEGIN
+			/* 메뉴 ID 담기 */
+			SELECT MENU_ID INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_INDEX= #{menuIndex};
+			
+			UPDATE TB_MENU_LSH
+			SET MENU_DEL_DATE=SYSDATE
+			WHERE MENU_INDEX=#{menuIndex};
+									
+			UPDATE TB_MENU_LSH 
+			SET MENU_PARENT='MENU_000000'
+			WHERE MENU_PARENT=P_MENU_ID;
+	END;
+	</update>
+	
+	<update id="deleteMiddleMenu" parameterType="egovMap">
+	/* menu.deleteMenu */
+	/* 삭제하는 메뉴가 중분류일 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+	BEGIN
+			/* 메뉴 ID 담기 */
+			SELECT MENU_ID INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_INDEX= #{menuIndex};
+			
+			UPDATE TB_MENU_LSH
+			SET MENU_DEL_DATE=SYSDATE
+			WHERE MENU_INDEX=#{menuIndex};
+               
+			UPDATE TB_MENU_LSH 
+			SET MENU_PARENT='MENU_000000'
+			WHERE MENU_PARENT=P_MENU_ID;
+	END;
+	</update>
+	
+	<update id="deleteElseMenu" parameterType="egovMap">
+	/* menu.deleteMenu */
+	/* 삭제하는 메뉴가 소분류일 때 */
+	DECLARE
+			<![CDATA[ P_MENU_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+			<![CDATA[ P_PARENT_ID TB_MENU_LSH.MENU_ID%TYPE; ]]>
+	BEGIN
+			/* 메뉴 ID 담기 */
+			SELECT MENU_ID INTO P_MENU_ID
+			FROM TB_MENU_LSH
+			WHERE MENU_INDEX= #{menuIndex};
+			
+			UPDATE TB_MENU_LSH
+			SET MENU_DEL_DATE=SYSDATE
+			WHERE MENU_INDEX=#{menuIndex};
+			
+	END;
+	</update>
+	
+</mapper>
